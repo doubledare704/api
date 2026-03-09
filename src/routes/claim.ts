@@ -157,6 +157,7 @@ async function handleGithubOAuthCallback(
     }>();
 
     if (!tokenData.access_token) {
+      console.error("GitHub OAuth error:", tokenData.error);
       return c.redirect(`${FRONTEND_BASE}/claim/error?reason=github_error`);
     }
 
@@ -193,8 +194,9 @@ async function handleGithubOAuthCallback(
     return c.redirect(`${FRONTEND_BASE}/claim/error?reason=github_error`);
   }
 
-  // Mark the token as claimed with GitHub identity
-  await c.env.prod_pinchbench
+  // Mark the token as claimed with GitHub identity.
+  // AND claimed_at IS NULL ensures only the first concurrent request wins (prevents double-claim).
+  const claimResult = await c.env.prod_pinchbench
     .prepare(
       `UPDATE tokens
        SET claimed_at = datetime('now'),
@@ -202,10 +204,14 @@ async function handleGithubOAuthCallback(
            github_username = ?,
            claim_code = NULL,
            claim_expires_at = NULL
-       WHERE id = ?`,
+       WHERE id = ? AND claimed_at IS NULL`,
     )
     .bind(githubId, githubUsername, tokenRow.id)
     .run();
+
+  if (claimResult.changes === 0) {
+    return c.redirect(`${FRONTEND_BASE}/claim/error?reason=already_claimed`);
+  }
 
   return c.redirect(`${FRONTEND_BASE}/claim/success`);
 }
