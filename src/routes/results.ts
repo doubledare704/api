@@ -175,10 +175,10 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
 
     const existing = await c.env.prod_pinchbench
       .prepare(
-        "SELECT id, score_percentage FROM submissions WHERE id = ? LIMIT 1",
+        "SELECT id, score_percentage, official FROM submissions WHERE id = ? LIMIT 1",
       )
       .bind(payload.submission_id)
-      .first<{ id: string; score_percentage: number }>();
+      .first<{ id: string; score_percentage: number; official: number }>();
 
     const computedScorePercentage =
       payload.max_score === 0 ? 0 : payload.total_score / payload.max_score;
@@ -298,11 +298,15 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
     const percentile =
       totalSubmissions === 0 ? 0 : (lower / totalSubmissions) * 100;
 
+    const officialResult = existing
+      ? existing.official === 1
+      : isOfficial === 1;
+
     return c.json(
       {
         status: "accepted",
         submission_id: payload.submission_id,
-        official: isOfficial === 1,
+        official: officialResult,
         rank,
         percentile: Number(percentile.toFixed(2)),
         leaderboard_url: `https://pinchbench.com/submission/${payload.submission_id}`,
