@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS tokens (
   claim_code TEXT,
   claim_expires_at TEXT,
   claimed_at TEXT,
+  github_id INTEGER,
+  github_username TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_used_at TEXT
 );
@@ -55,6 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_submissions_provider ON submissions(provider);
 CREATE INDEX IF NOT EXISTS idx_submissions_timestamp ON submissions(timestamp);
 CREATE INDEX IF NOT EXISTS idx_submissions_score_percentage ON submissions(score_percentage);
 CREATE INDEX IF NOT EXISTS idx_submissions_official ON submissions(official);
+CREATE INDEX IF NOT EXISTS idx_tokens_github_username ON tokens(github_username);
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_ip ON token_registration_limits(ip);
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_created_at ON token_registration_limits(created_at);
 
