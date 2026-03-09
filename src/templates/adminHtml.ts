@@ -100,6 +100,7 @@ export const adminHTML = `<!DOCTYPE html>
             <option value="all">All</option>
           </select>
         </div>
+        <button class="btn btn-danger" onclick="deleteZeroPercentSubmissions()">Delete all 0%</button>
       </div>
       <div id="submissions-content"><div class="loading">Loading...</div></div>
     </div>
@@ -443,6 +444,17 @@ export const adminHTML = `<!DOCTYPE html>
         await api('/submissions/' + id, { method: 'DELETE' });
         showAlert('Submission deleted');
         loadSubmissions(currentSubmissionsPage);
+      } catch (err) {
+        showAlert(err.message, 'error');
+      }
+    }
+
+    async function deleteZeroPercentSubmissions() {
+      if (!confirm('Delete all submissions with a 0.0% score? This cannot be undone.')) return;
+      try {
+        const result = await api('/submissions/zero-percent', { method: 'DELETE' });
+        showAlert('Deleted ' + result.deleted + ' zero-percent submissions');
+        loadSubmissions(0);
       } catch (err) {
         showAlert(err.message, 'error');
       }

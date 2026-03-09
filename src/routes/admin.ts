@@ -195,6 +195,29 @@ admin.get("/api/submissions", async (c) => {
 });
 
 /**
+ * DELETE /admin/api/submissions/zero-percent
+ * Delete all submissions with 0% score
+ */
+admin.delete("/api/submissions/zero-percent", async (c) => {
+  const user = getAdminUser(c);
+
+  const result = await c.env.prod_pinchbench
+    .prepare("DELETE FROM submissions WHERE score_percentage = 0")
+    .run();
+
+  const deletedCount = result.meta.changes ?? 0;
+
+  await logAdminAction(
+    c.env.prod_pinchbench,
+    user?.email ?? "unknown",
+    "delete_zero_percent_submissions",
+    { deleted_count: deletedCount },
+  );
+
+  return c.json({ success: true, deleted: deletedCount });
+});
+
+/**
  * DELETE /admin/api/submissions/:id
  * Delete a submission
  */
