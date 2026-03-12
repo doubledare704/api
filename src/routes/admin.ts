@@ -427,4 +427,58 @@ admin.post("/api/tokens/:id/unconfirm", async (c) => {
   return c.json({ success: true });
 });
 
+// ============================================================================
+// USERS API
+// ============================================================================
+
+/**
+ * GET /admin/api/users
+ * List users (GitHub usernames) with submission counts
+ * Users are identified by the user_id field in tokens (set when claiming via GitHub OAuth)
+ */
+admin.get("/api/users", async (c) => {
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(c.req.query("limit") ?? "20", 10)),
+  );
+  const offset = Math.max(0, parseInt(c.req.query("offset") ?? "0", 10));
+
+  const [results, countRow] = await Promise.all([
+    c.env.prod_pinchbench
+      .prepare(
+        `SELECT 
+          t.user_id as github_username,
+          COUNT(DISTINCT t.id) as token_count,
+          (SELECT COUNT(*) FROM submissions s WHERE s.token_id IN (SELECT id FROM tokens WHERE user_id = t.user_id)) as submission_count,
+          MIN(t.created_at) as first_seen,
+          MAX(t.last_used_at) as last_active
+        FROM tokens t
+        WHERE t.user_id IS NOT NULL AND t.user_id != ''
+        GROUP BY t.user_id
+        ORDER BY submission_count DESC, last_active DESC
+        LIMIT ? OFFSET ?`,
+      )
+      .bind(limit, offset)
+      .all<{
+        github_username: string;
+        token_count: number;
+        submission_count: number;
+        first_seen: string;
+        last_active: string | null;
+      }>(),
+    c.env.prod_pinchbench
+      .prepare(
+        "SELECT COUNT(DISTINCT user_id) as count FROM tokens WHERE user_id IS NOT NULL AND user_id != ''",
+      )
+      .first<{ count: number }>(),
+  ]);
+
+  return c.json({
+    users: results.results ?? [],
+    total: countRow?.count ?? 0,
+    limit,
+    offset,
+  });
+});
+
 export { admin };
