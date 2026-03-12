@@ -73,6 +73,7 @@ export const adminHTML = `<!DOCTYPE html>
       <button class="tab" data-tab="versions">Benchmark Versions</button>
       <button class="tab" data-tab="submissions">Submissions</button>
       <button class="tab" data-tab="tokens">Tokens</button>
+      <button class="tab" data-tab="users">Users</button>
     </div>
 
     <div id="versions" class="panel">
@@ -122,26 +123,50 @@ export const adminHTML = `<!DOCTYPE html>
       </div>
       <div id="tokens-content"><div class="loading">Loading...</div></div>
     </div>
+
+    <div id="users" class="panel">
+      <h2 style="margin-bottom: 15px;">Users</h2>
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="users-search" placeholder="Search by GitHub username..." oninput="filterUsers()">
+        </div>
+        <div class="page-size-selector">
+          <label for="users-page-size">Show:</label>
+          <select id="users-page-size" onchange="changeUsersPageSize()">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+      </div>
+      <div id="users-content"><div class="loading">Loading...</div></div>
+    </div>
   </div>
 
   <script>
     const API_BASE = '/admin/api';
     let currentSubmissionsPage = 0;
     let currentTokensPage = 0;
+    let currentUsersPage = 0;
     let submissionsPageSize = 20;
     let tokensPageSize = 20;
+    let usersPageSize = 20;
 
     // Store full data for client-side filtering and sorting
     let allVersions = [];
     let allSubmissions = [];
     let allTokens = [];
+    let allUsers = [];
     let totalSubmissions = 0;
     let totalTokens = 0;
+    let totalUsers = 0;
 
     // Sort state for each table: { column: string, direction: 'asc' | 'desc' }
     let versionsSort = { column: 'created_at', direction: 'desc' };
     let submissionsSort = { column: 'timestamp', direction: 'desc' };
     let tokensSort = { column: 'created_at', direction: 'desc' };
+    let usersSort = { column: 'submission_count', direction: 'desc' };
 
     // Generic sort function
     function sortData(data, column, direction, getters) {
@@ -185,7 +210,7 @@ export const adminHTML = `<!DOCTYPE html>
 
     function getTabFromHash() {
       const hash = window.location.hash.slice(1);
-      const validTabs = ['versions', 'submissions', 'tokens'];
+      const validTabs = ['versions', 'submissions', 'tokens', 'users'];
       return validTabs.includes(hash) ? hash : 'versions';
     }
 
@@ -614,6 +639,110 @@ export const adminHTML = `<!DOCTYPE html>
       }
     }
 
+    // ========== USERS ==========
+    const usersGetters = {
+      github_username: u => u.github_username,
+      token_count: u => u.token_count,
+      submission_count: u => u.submission_count,
+      first_seen: u => u.first_seen ? new Date(u.first_seen) : null,
+      last_active: u => u.last_active ? new Date(u.last_active) : null
+    };
+
+    function sortUsers(column) {
+      if (usersSort.column === column) {
+        usersSort.direction = usersSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        usersSort.column = column;
+        usersSort.direction = 'asc';
+      }
+      filterUsers();
+    }
+
+    function changeUsersPageSize() {
+      const select = document.getElementById('users-page-size');
+      const value = select.value;
+      usersPageSize = value === 'all' ? 10000 : parseInt(value, 10);
+      currentUsersPage = 0;
+      document.getElementById('users-search').value = '';
+      loadUsers(0);
+    }
+
+    async function loadUsers(page = 0) {
+      currentUsersPage = page;
+      document.getElementById('users-content').innerHTML = '<div class="loading">Loading...</div>';
+      try {
+        const data = await api('/users?limit=' + usersPageSize + '&offset=' + (page * usersPageSize));
+        allUsers = data.users;
+        totalUsers = data.total;
+        filterUsers();
+      } catch (err) {
+        document.getElementById('users-content').innerHTML = '<div class="error">' + err.message + '</div>';
+      }
+    }
+
+    function filterUsers() {
+      const query = document.getElementById('users-search').value.toLowerCase().trim();
+      let filtered = allUsers;
+      if (query) {
+        filtered = allUsers.filter(u => {
+          return u.github_username.toLowerCase().includes(query);
+        });
+      }
+      const sorted = sortData(filtered, usersSort.column, usersSort.direction, usersGetters);
+      renderUsers(sorted, query ? sorted.length : totalUsers, !!query);
+    }
+
+    function renderUsers(users, total, isFiltered = false) {
+      if (!users.length) {
+        const query = document.getElementById('users-search').value;
+        document.getElementById('users-content').innerHTML = query 
+          ? '<div class="no-results">No users match your search.</div>' 
+          : '<p>No users found. Users appear here when they claim their tokens via GitHub OAuth.</p>';
+        return;
+      }
+      
+      function sortClass(col) {
+        if (usersSort.column !== col) return 'sortable';
+        return 'sortable sort-' + usersSort.direction;
+      }
+      
+      let html = '<table><thead><tr>';
+      html += '<th class="' + sortClass('github_username') + '" onclick="sortUsers(\\'github_username\\')">GitHub Username</th>';
+      html += '<th class="' + sortClass('submission_count') + '" onclick="sortUsers(\\'submission_count\\')">Submissions</th>';
+      html += '<th class="' + sortClass('token_count') + '" onclick="sortUsers(\\'token_count\\')">Tokens</th>';
+      html += '<th class="' + sortClass('first_seen') + '" onclick="sortUsers(\\'first_seen\\')">First Seen</th>';
+      html += '<th class="' + sortClass('last_active') + '" onclick="sortUsers(\\'last_active\\')">Last Active</th>';
+      html += '<th>Profile</th>';
+      html += '</tr></thead><tbody>';
+      
+      users.forEach(u => {
+        html += '<tr>';
+        html += '<td><strong>' + u.github_username + '</strong></td>';
+        html += '<td>' + u.submission_count + '</td>';
+        html += '<td>' + u.token_count + '</td>';
+        html += '<td>' + (u.first_seen ? new Date(u.first_seen).toLocaleDateString() : '-') + '</td>';
+        html += '<td>' + (u.last_active ? new Date(u.last_active).toLocaleDateString() : '-') + '</td>';
+        html += '<td><a href="https://github.com/' + encodeURIComponent(u.github_username) + '" target="_blank" rel="noopener" class="btn btn-secondary">GitHub ↗</a></td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      
+      const showingAll = usersPageSize >= 10000;
+      html += '<div class="pagination">';
+      if (!isFiltered && !showingAll) {
+        html += '<button class="btn btn-secondary" onclick="loadUsers(' + (currentUsersPage - 1) + ')" ' + (currentUsersPage === 0 ? 'disabled' : '') + '>Previous</button>';
+        html += '<span>Page ' + (currentUsersPage + 1) + ' / ' + Math.ceil(total / usersPageSize) + '</span>';
+        html += '<button class="btn btn-secondary" onclick="loadUsers(' + (currentUsersPage + 1) + ')" ' + ((currentUsersPage + 1) * usersPageSize >= total ? 'disabled' : '') + '>Next</button>';
+      }
+      if (isFiltered) {
+        html += '<span>' + users.length + ' of ' + allUsers.length + ' loaded results</span>';
+      } else {
+        html += '<span style="margin-left: auto; color: #8b949e;">Showing ' + users.length + ' of ' + total + ' total</span>';
+      }
+      html += '</div>';
+      document.getElementById('users-content').innerHTML = html;
+    }
+
     // ========== INIT ==========
     async function init() {
       try {
@@ -625,6 +754,7 @@ export const adminHTML = `<!DOCTYPE html>
       loadVersions();
       loadSubmissions();
       loadTokens();
+      loadUsers();
     }
 
     init();
