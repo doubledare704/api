@@ -434,7 +434,7 @@ admin.post("/api/tokens/:id/unconfirm", async (c) => {
 /**
  * GET /admin/api/users
  * List users (GitHub usernames) with submission counts
- * Users are identified by the user_id field in tokens (set when claiming via GitHub OAuth)
+ * Users are identified by the github_username field in tokens (set when claiming via GitHub OAuth)
  */
 admin.get("/api/users", async (c) => {
   const limit = Math.min(
@@ -447,14 +447,14 @@ admin.get("/api/users", async (c) => {
     c.env.prod_pinchbench
       .prepare(
         `SELECT 
-          t.user_id as github_username,
+          t.github_username,
           COUNT(DISTINCT t.id) as token_count,
-          (SELECT COUNT(*) FROM submissions s WHERE s.token_id IN (SELECT id FROM tokens WHERE user_id = t.user_id)) as submission_count,
+          (SELECT COUNT(*) FROM submissions s WHERE s.token_id IN (SELECT id FROM tokens WHERE github_username = t.github_username)) as submission_count,
           MIN(t.created_at) as first_seen,
           MAX(t.last_used_at) as last_active
         FROM tokens t
-        WHERE t.user_id IS NOT NULL AND t.user_id != ''
-        GROUP BY t.user_id
+        WHERE t.github_username IS NOT NULL AND t.github_username != ''
+        GROUP BY t.github_username
         ORDER BY submission_count DESC, last_active DESC
         LIMIT ? OFFSET ?`,
       )
@@ -468,7 +468,7 @@ admin.get("/api/users", async (c) => {
       }>(),
     c.env.prod_pinchbench
       .prepare(
-        "SELECT COUNT(DISTINCT user_id) as count FROM tokens WHERE user_id IS NOT NULL AND user_id != ''",
+        "SELECT COUNT(DISTINCT github_username) as count FROM tokens WHERE github_username IS NOT NULL AND github_username != ''",
       )
       .first<{ count: number }>(),
   ]);
