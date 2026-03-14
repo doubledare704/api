@@ -18,7 +18,7 @@ export const MODEL_METADATA = [
     hf_link: null,
   },
   {
-    model: "nvidia/nemotron-3-super-128b-a12b",
+    model: "nvidia/nemotron-3-super-120b-a12b",
     provider: "nvidia",
     weights: "Open",
     hf_link:
@@ -221,7 +221,8 @@ export const MODEL_METADATA = [
     model: "mistralai/mistral-large-2512",
     provider: "mistralai",
     weights: "Open",
-    hf_link: "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512",
+    hf_link:
+      "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512",
   },
   {
     model: "openai/gpt-oss-20b",
@@ -264,8 +265,7 @@ export const MODEL_METADATA = [
     model: "meta-llama/llama-4-scout",
     provider: "meta-llama",
     weights: "Open",
-    hf_link:
-      "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    hf_link: "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct",
   },
   {
     model: "openai/gpt-5.2",
