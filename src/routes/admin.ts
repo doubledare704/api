@@ -314,21 +314,12 @@ admin.post("/api/submissions/:id/official", async (c) => {
  * List models seen in submissions with metadata
  */
 admin.get("/api/models/metadata", async (c) => {
-  const metadataByKey = new Map(
-    MODEL_METADATA.map((meta) => [`${meta.model}|${meta.provider}`, meta]),
-  );
-  const metadataByModel = new Map(
-    MODEL_METADATA.map((meta) => [meta.model, meta]),
-  );
-
   const results = await c.env.prod_pinchbench
     .prepare("SELECT DISTINCT model, provider FROM submissions ORDER BY model ASC")
     .all<{ model: string; provider: string | null }>();
 
   const models = (results.results ?? []).map((row) => {
-    const meta = row.provider
-      ? metadataByKey.get(`${row.model}|${row.provider}`)
-      : metadataByModel.get(row.model);
+    const meta = getModelMetadata(row.model, row.provider ?? undefined);
     return {
       model: row.model,
       provider: row.provider ?? meta?.provider ?? "unknown",
