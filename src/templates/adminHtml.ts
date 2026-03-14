@@ -566,6 +566,17 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     function renderModels(models) {
+      // Simple HTML-escaping to prevent XSS when rendering model data
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
       if (!models.length) {
         const query = document.getElementById('models-search').value;
         document.getElementById('models-content').innerHTML = query
@@ -593,12 +604,20 @@ export const adminHTML = `<!DOCTYPE html>
         } else if (m.weights === 'Closed') {
           weightsBadge = '<span class="badge badge-red">Closed</span>';
         }
-        const hfLink = m.hf_link
-          ? '<a class="link" href="' + m.hf_link + '" target="_blank" rel="noopener">Hugging Face ↗</a>'
-          : '-';
+
+        let hfLink = '-';
+        if (typeof m.hf_link === 'string') {
+          const url = m.hf_link.trim();
+          // Only allow links to Hugging Face, as these are expected here
+          if (url.startsWith('https://huggingface.co/')) {
+            const safeUrl = escapeHtml(url);
+            hfLink = '<a class="link" href="' + safeUrl + '" target="_blank" rel="noopener">Hugging Face ↗</a>';
+          }
+        }
+
         html += '<tr>';
-        html += '<td class="mono">' + m.model + '</td>';
-        html += '<td>' + (m.provider || '-') + '</td>';
+        html += '<td class="mono">' + escapeHtml(m.model) + '</td>';
+        html += '<td>' + (m.provider ? escapeHtml(m.provider) : '-') + '</td>';
         html += '<td>' + weightsBadge + '</td>';
         html += '<td>' + hfLink + '</td>';
         html += '</tr>';
