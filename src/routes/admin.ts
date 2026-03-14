@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { Bindings, AdminVariables } from "../types";
 import { adminAuthMiddleware, getAdminUser } from "../utils/adminAuth";
 import { adminHTML } from "../templates/adminHtml";
+import { MODEL_METADATA } from "../data/modelMetadata";
+import { getModelMetadata } from "../utils/modelMetadata";
 
 const admin = new Hono<{ Bindings: Bindings; Variables: AdminVariables }>();
 
@@ -186,8 +188,17 @@ admin.get("/api/submissions", async (c) => {
       .first<{ count: number }>(),
   ]);
 
+  const submissions = (results.results ?? []).map((row) => {
+    const meta = getModelMetadata(row.model, row.provider);
+    return {
+      ...row,
+      weights: meta?.weights ?? "Unknown",
+      hf_link: meta?.hf_link ?? null,
+    };
+  });
+
   return c.json({
-    submissions: results.results ?? [],
+    submissions,
     total: countRow?.count ?? 0,
     limit,
     offset,
@@ -292,6 +303,32 @@ admin.post("/api/submissions/:id/official", async (c) => {
   );
 
   return c.json({ success: true, official: body.official });
+});
+
+// ============================================================================
+// MODEL METADATA API
+// ============================================================================
+
+/**
+ * GET /admin/api/models/metadata
+ * List models seen in submissions with metadata
+ */
+admin.get("/api/models/metadata", async (c) => {
+  const results = await c.env.prod_pinchbench
+    .prepare("SELECT DISTINCT model, provider FROM submissions ORDER BY model ASC")
+    .all<{ model: string; provider: string | null }>();
+
+  const models = (results.results ?? []).map((row) => {
+    const meta = getModelMetadata(row.model, row.provider);
+    return {
+      model: row.model,
+      provider: row.provider ?? meta?.provider ?? "unknown",
+      weights: meta?.weights ?? "Unknown",
+      hf_link: meta?.hf_link ?? null,
+    };
+  });
+
+  return c.json({ models });
 });
 
 // ============================================================================
