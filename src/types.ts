@@ -83,3 +83,11 @@ export type SubmissionRow = {
   claimed: number;
   github_username: string | null;
 };
+
+export type BenchmarkVersion = {
+  id: string;
+  semver: string | null;
+  label: string;
+  release_notes: string | null;
+  release_url: string | null;
+};
