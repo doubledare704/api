@@ -1,26 +1,26 @@
 -- Backfill legacy git-hash versions with semver 1.0.0-beta.N
--- Existing versions (identified by git hashes) should be assigned sequential beta versions
--- ordered by created_at ASC. This ensures deterministic assignment.
+-- Query existing versions ordered by created_at and assign sequential beta versions
+-- This migration should be run AFTER 20260406_add_semver_columns.sql
+-- Requires SQLite 3.8.3+ for recursive CTEs and ROW_NUMBER()
 
--- First, let's see what versions exist and their creation order
--- SELECT id, created_at FROM benchmark_versions ORDER BY created_at ASC;
+-- Step 1: Create a temporary table with ordered legacy version IDs and their sequence numbers
+CREATE TEMPORARY TABLE temp_legacy_order AS
+WITH numbered AS (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) as seq
+  FROM benchmark_versions 
+  WHERE semver IS NULL
+)
+SELECT id, seq, '1.0.0-beta.' || CAST(seq AS TEXT) as semver FROM numbered;
 
--- Example UPDATE statements (uncomment and run after verifying the data):
--- UPDATE benchmark_versions SET semver = '1.0.0-beta.1' WHERE id = '<first_git_hash_id>';
--- UPDATE benchmark_versions SET semver = '1.0.0-beta.2' WHERE id = '<second_git_hash_id>';
--- ... and so on
+-- Step 2: Apply updates to benchmark_versions using the temp table
+UPDATE benchmark_versions
+SET 
+  semver = (SELECT semver FROM temp_legacy_order WHERE temp_legacy_order.id = benchmark_versions.id),
+  label = 'Legacy Version ' || (SELECT CAST(seq AS TEXT) FROM temp_legacy_order WHERE temp_legacy_order.id = benchmark_versions.id)
+WHERE EXISTS (SELECT 1 FROM temp_legacy_order WHERE temp_legacy_order.id = benchmark_versions.id);
 
--- For dynamic backfill (SQLite doesn't support window functions well, so use a procedural approach):
--- 1. Get ordered list of existing benchmark_versions without semver
--- 2. Assign 1.0.0-beta.1, 1.0.0-beta.2, etc. in order of created_at
+-- Step 3: Clean up
+DROP TABLE temp_legacy_order;
 
--- Manual approach: First query to find how many legacy versions exist
--- SELECT COUNT(*) FROM benchmark_versions WHERE semver IS NULL;
-
--- Then run individual UPDATE statements for each legacy version:
--- UPDATE benchmark_versions SET semver = '1.0.0-beta.1', label = 'Legacy Version 1' WHERE id = (SELECT id FROM benchmark_versions WHERE semver IS NULL ORDER BY created_at ASC LIMIT 1);
--- UPDATE benchmark_versions SET semver = '1.0.0-beta.2', label = 'Legacy Version 2' WHERE id = (SELECT id FROM benchmark_versions WHERE semver IS NULL ORDER BY created_at ASC LIMIT 1 OFFSET 1);
--- ... continue for each legacy version
-
--- Note: The label field is optional - it can be used to provide a human-readable name
--- If you want auto-generated labels: CONCAT('Legacy Version ', row_number)
+-- Verification query (run separately to verify results):
+-- SELECT id, semver, label, created_at FROM benchmark_versions ORDER BY created_at ASC;
