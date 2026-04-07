@@ -3,6 +3,9 @@ import type { Bindings, SubmissionPayload } from "../types";
 import { ensureHttps, getAuthToken, hashToken } from "../utils/security";
 import { normalizeModelName } from "../utils/models";
 
+// Matches semver-like strings: X.Y.Z or X.Y (with optional pre-release/build)
+const SEMVER_REGEX = /^\d+\.\d+(\.\d+)?(-[\w.]+)?(\+[\w.]+)?$/;
+
 const UUID_V4_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -259,11 +262,17 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
         .run();
 
       if (payload.benchmark_version) {
+        // If the version looks like a semver, use it for both semver and label
+        // Otherwise, default to "0.0.1" for git hash-style versions
+        const isSemver = SEMVER_REGEX.test(payload.benchmark_version);
+        const semverValue = isSemver ? payload.benchmark_version : "0.0.1";
+        const labelValue = isSemver ? payload.benchmark_version : "0.0.1";
+
         await c.env.prod_pinchbench
           .prepare(
-            "INSERT OR IGNORE INTO benchmark_versions (id, current) VALUES (?, 0)",
+            "INSERT OR IGNORE INTO benchmark_versions (id, current, semver, label) VALUES (?, 0, ?, ?)",
           )
-          .bind(payload.benchmark_version)
+          .bind(payload.benchmark_version, semverValue, labelValue)
           .run();
       }
     }
