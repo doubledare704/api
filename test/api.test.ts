@@ -94,7 +94,7 @@ describe('API Integration Tests', () => {
       }
 
       const payload = {
-        submission_id: 'test-over-limit',
+        submission_id: '660e8400-e29b-41d4-a716-446655440000',
         timestamp: '2026-04-09T10:00:00Z',
         model: 'test-model',
         total_score: 100,

@@ -146,22 +146,6 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
     }
 
     const ip = getIp(c);
-    const { allowed, remaining } = await checkSubmissionLimit(
-      c.env.prod_pinchbench,
-      tokenRow.id,
-      ip,
-    );
-
-    if (!allowed) {
-      return c.json(
-        {
-          status: "error",
-          error: "rate_limited",
-          message: "Too many submissions (50 per 24h limit reached)",
-        },
-        429,
-      );
-    }
 
     const contentLength = Number(c.req.header("Content-Length") ?? 0);
     if (contentLength > 1024 * 1024) {
@@ -292,8 +276,23 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       existing?.score_percentage ?? computedScorePercentage;
 
     if (!existing) {
-      // Record rate limit attempt
-      await recordSubmissionAttempt(c.env.prod_pinchbench, tokenRow.id, ip);
+      // Record rate limit attempt and check if limit exceeded (atomic INSERT-then-COUNT)
+      const { allowed: rateLimitAllowed } = await recordSubmissionAttempt(
+        c.env.prod_pinchbench,
+        tokenRow.id,
+        ip,
+      );
+
+      if (!rateLimitAllowed) {
+        return c.json(
+          {
+            status: "error",
+            error: "rate_limited",
+            message: "Too many submissions (50 per 24h limit reached)",
+          },
+          429,
+        );
+      }
 
       await c.env.prod_pinchbench
         .prepare(

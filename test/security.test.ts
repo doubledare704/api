@@ -120,7 +120,7 @@ describe('Security Utils', () => {
       expect(result.remaining).toBe(50);
     });
 
-    it('should track submissions by both token and IP', async () => {
+    it('should track submissions by both token and IP independently', async () => {
       // Create another token for testing
       const otherTokenId = 'other-token-' + Math.random().toString(36).substr(2, 9);
       rawDb.exec(`
@@ -128,35 +128,35 @@ describe('Security Utils', () => {
         VALUES ('${otherTokenId}', 'other-hash', datetime('now'))
       `);
 
-      // Add 25 submissions for token
-      for (let i = 0; i < 25; i++) {
+      // Add 50 submissions for testTokenId (at token limit)
+      for (let i = 0; i < 50; i++) {
         rawDb.exec(`
           INSERT INTO submission_rate_limits (token_id, ip, created_at)
           VALUES ('${testTokenId}', 'other-ip', datetime('now', '-1 hour'))
         `);
       }
 
-      // Add 25 submissions for IP
-      for (let i = 0; i < 25; i++) {
-        rawDb.exec(`
-          INSERT INTO submission_rate_limits (token_id, ip, created_at)
-          VALUES ('${otherTokenId}', '${testIp}', datetime('now', '-1 hour'))
-        `);
-      }
+      // Token is at limit - should be blocked
+      const result1 = await checkSubmissionLimit(mockDb as any, testTokenId, testIp);
+      expect(result1.allowed).toBe(false);
+      expect(result1.remaining).toBe(0);
 
-      const result = await checkSubmissionLimit(mockDb as any, testTokenId, testIp);
-      expect(result.allowed).toBe(false); // 25 + 25 = 50, at limit
-      expect(result.remaining).toBe(0);
+      // Different token with same IP should be allowed (independent limits)
+      const result2 = await checkSubmissionLimit(mockDb as any, otherTokenId, testIp);
+      expect(result2.allowed).toBe(true);
+      expect(result2.remaining).toBe(50);
     });
 
-    it('should record submission attempts', async () => {
+    it('should record submission attempts and return limit status', async () => {
       const beforeCount = (rawDb.prepare('SELECT COUNT(*) as count FROM submission_rate_limits').get() as { count: number }).count;
 
-      await recordSubmissionAttempt(mockDb as any, testTokenId, testIp);
+      const result = await recordSubmissionAttempt(mockDb as any, testTokenId, testIp);
 
       const afterCount = (rawDb.prepare('SELECT COUNT(*) as count FROM submission_rate_limits').get() as { count: number }).count;
 
       expect(afterCount).toBe(beforeCount + 1);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(49); // 50 limit - 1 recorded
     });
   });
 });
