@@ -91,8 +91,8 @@ export const recordSubmissionAttempt = async (
   const ipCount = ipResult?.count ?? 0;
 
   // Check if either limit is exceeded (note: this current request is already counted)
-  // We reject if count >= limit (meaning we allow 0-49, reject 50+)
-  const allowed = tokenCount < limit && ipCount < limit;
+  // We allow up to limit (inclusive), so reject only if count > limit
+  const allowed = tokenCount <= limit && ipCount <= limit;
   const remaining = Math.min(
     Math.max(0, limit - tokenCount),
     Math.max(0, limit - ipCount)
