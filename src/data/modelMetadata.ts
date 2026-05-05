@@ -1,5 +1,17 @@
 export const MODEL_METADATA = [
   {
+    model: "arcee-ai/trinity-large-thinking",
+    provider: "arcee-ai",
+    weights: "Open",
+    hf_link: "https://huggingface.co/arcee-ai/Trinity-Large-Thinking",
+  },
+  {
+    model: "minimax/minimax-m2.7",
+    provider: "minimax",
+    weights: "Open",
+    hf_link: "https://huggingface.co/MiniMaxAI/MiniMax-M2.7",
+  },
+  {
     model: "anthropic/claude-sonnet-4.6",
     provider: "anthropic",
     weights: "Closed",
