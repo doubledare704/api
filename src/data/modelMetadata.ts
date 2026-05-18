@@ -291,4 +291,40 @@ export const MODEL_METADATA = [
     weights: "Closed",
     hf_link: null,
   },
+  {
+    model: "deepseek/deepseek-v4-flash",
+    provider: "deepseek",
+    weights: "Open",
+    hf_link: "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash",
+  },
+  {
+    model: "deepseek/deepseek-v4-pro",
+    provider: "deepseek",
+    weights: "Open",
+    hf_link: "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro",
+  },
+  {
+    model: "xiaomi/mimo-v2.5",
+    provider: "xiaomi",
+    weights: "Open",
+    hf_link: "https://huggingface.co/XiaomiMiMo/MiMo-V2.5",
+  },
+  {
+    model: "xiaomi/mimo-v2.5-pro",
+    provider: "xiaomi",
+    weights: "Open",
+    hf_link: "https://huggingface.co/XiaomiMiMo/MiMo-V2.5-Pro",
+  },
+  {
+    model: "z-ai/glm-5.1",
+    provider: "z-ai",
+    weights: "Open",
+    hf_link: "https://huggingface.co/zai-org/GLM-5.1",
+  },
+  {
+    model: "z-ai/glm-5-turbo",
+    provider: "z-ai",
+    weights: "Open",
+    hf_link: "https://huggingface.co/zai-org/GLM-5-Turbo",
+  },
 ];
