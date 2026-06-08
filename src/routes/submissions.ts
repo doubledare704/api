@@ -219,7 +219,9 @@ export const registerSubmissionRoutes = (
     let countQuery = `
       SELECT COUNT(*) as total
       FROM submissions s
-      JOIN tokens t ON s.token_id = t.id
+      -- tokens is only needed when the verified filter reads t.claimed_at; skipping
+      -- it for the default count avoids an unnecessary D1 join on the hot path.
+      ${verified ? "JOIN tokens t ON s.token_id = t.id" : ""}
       WHERE 1=1
     `;
     const countBindings: (string | number)[] = [];
