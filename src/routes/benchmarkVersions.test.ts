@@ -1,5 +1,319 @@
 import { describe, test, expect } from "vitest";
+import { Hono } from "hono";
+import type { D1Database } from "@cloudflare/workers-types";
+import type { Bindings } from "../types";
 import { parseSemver, isValidSemver, compareSemver } from "./benchmarkVersions";
+import { registerBenchmarkVersionRoutes } from "./benchmarkVersions";
+
+type BenchmarkVersionFixture = {
+  id: string;
+  created_at: string;
+  current: number;
+  hidden: number;
+  semver: string | null;
+  label: string | null;
+  release_notes: string | null;
+  release_url: string | null;
+};
+
+type SubmissionFixture = {
+  id: string;
+  benchmark_version: string | null;
+};
+
+type QueryLogEntry = {
+  sql: string;
+  params: unknown[];
+  operation: "all" | "first";
+};
+
+function createBenchmarkVersionFixtures(): BenchmarkVersionFixture[] {
+  return [
+    {
+      id: "v2-release",
+      created_at: "2026-05-01T00:00:00.000Z",
+      current: 1,
+      hidden: 0,
+      semver: "2.0.0",
+      label: "2.0.0",
+      release_notes: "latest stable",
+      release_url: "https://example.com/v2",
+    },
+    {
+      id: "v2-rc1",
+      created_at: "2026-04-15T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "2.0.0-rc.1",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "v1-2-2-dev13",
+      created_at: "2026-04-01T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "1.2.2-dev.13+gabc1234",
+      label: null,
+      release_notes: "dev build",
+      release_url: null,
+    },
+    {
+      id: "v1-2-2-dev1",
+      created_at: "2026-03-20T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "1.2.2-dev.1+g1111111",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "v1-2-1",
+      created_at: "2026-03-01T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "1.2.1",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "beta10",
+      created_at: "2026-02-10T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "1.0.0-beta.10",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "beta2",
+      created_at: "2026-02-02T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "1.0.0-beta.2",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "legacy-high",
+      created_at: "2026-01-20T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: null,
+      label: "Legacy High",
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "legacy-low",
+      created_at: "2026-01-01T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "not-semver",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "zero-submissions",
+      created_at: "2025-12-01T00:00:00.000Z",
+      current: 0,
+      hidden: 0,
+      semver: "0.9.0",
+      label: null,
+      release_notes: null,
+      release_url: null,
+    },
+    {
+      id: "hidden-with-submissions",
+      created_at: "2026-06-01T00:00:00.000Z",
+      current: 0,
+      hidden: 1,
+      semver: "9.9.9",
+      label: "Hidden",
+      release_notes: null,
+      release_url: null,
+    },
+  ];
+}
+
+function createSubmissionFixtures(): SubmissionFixture[] {
+  const distribution: Record<string, number> = {
+    "v2-release": 300,
+    "v2-rc1": 125,
+    "v1-2-2-dev13": 180,
+    "v1-2-2-dev1": 90,
+    "v1-2-1": 75,
+    beta10: 60,
+    beta2: 45,
+    "legacy-high": 35,
+    "legacy-low": 20,
+    "hidden-with-submissions": 70,
+  };
+
+  return Object.entries(distribution).flatMap(([benchmarkVersion, count]) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `${benchmarkVersion}-${index}`,
+      benchmark_version: benchmarkVersion,
+    })),
+  );
+}
+
+function getFixtureLabel(version: BenchmarkVersionFixture): string {
+  return version.label ?? version.semver ?? version.id.slice(0, 8);
+}
+
+function legacyBenchmarkVersionsSnapshot(
+  versions: BenchmarkVersionFixture[],
+  submissions: SubmissionFixture[],
+) {
+  const visibleVersions = versions
+    .filter((version) => version.hidden === 0)
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+  const versionsWithCounts = visibleVersions.map((version) => ({
+    id: version.id,
+    created_at: version.created_at,
+    is_current: version.current === 1,
+    submission_count: submissions.filter(
+      (submission) => submission.benchmark_version === version.id,
+    ).length,
+    semver: version.semver ?? null,
+    label: getFixtureLabel(version),
+    release_notes: version.release_notes ?? null,
+    release_url: version.release_url ?? null,
+  }));
+
+  const withSemver = versionsWithCounts.filter(
+    (version) => version.semver && isValidSemver(version.semver),
+  );
+  const withoutSemver = versionsWithCounts.filter(
+    (version) => !version.semver || !isValidSemver(version.semver),
+  );
+
+  withSemver.sort((a, b) => compareSemver(a.semver!, b.semver!));
+  withoutSemver.sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+
+  return [...withSemver, ...withoutSemver];
+}
+
+function createMockD1(
+  versions: BenchmarkVersionFixture[],
+  submissions: SubmissionFixture[],
+) {
+  const queryLog: QueryLogEntry[] = [];
+
+  const execute = (sql: string, params: unknown[]) => {
+    if (
+      sql.includes("FROM benchmark_versions") &&
+      sql.includes("WHERE hidden = 0")
+    ) {
+      return versions
+        .filter((version) => version.hidden === 0)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+    }
+
+    if (
+      sql.includes("FROM benchmark_versions") &&
+      sql.includes("WHERE current = 1 AND hidden = 0")
+    ) {
+      return versions
+        .filter((version) => version.current === 1 && version.hidden === 0)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        )
+        .slice(0, 1);
+    }
+
+    if (sql.includes("FROM submissions") && sql.includes("GROUP BY benchmark_version")) {
+      const versionIds = new Set(params);
+      const counts = new Map<string, number>();
+
+      for (const submission of submissions) {
+        if (!submission.benchmark_version || !versionIds.has(submission.benchmark_version)) {
+          continue;
+        }
+
+        counts.set(
+          submission.benchmark_version,
+          (counts.get(submission.benchmark_version) ?? 0) + 1,
+        );
+      }
+
+      return [...counts.entries()].map(([benchmark_version, count]) => ({
+        benchmark_version,
+        count,
+      }));
+    }
+
+    if (sql.includes("FROM submissions") && sql.includes("WHERE benchmark_version = ?")) {
+      const [benchmarkVersion] = params;
+      return [
+        {
+          count: submissions.filter(
+            (submission) => submission.benchmark_version === benchmarkVersion,
+          ).length,
+        },
+      ];
+    }
+
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+
+  const db = {
+    prepare: (sql: string) => {
+      let boundParams: unknown[] = [];
+      const statement = {
+        bind: (...params: unknown[]) => {
+          boundParams = params;
+          return statement;
+        },
+        all: async <T>() => {
+          queryLog.push({ sql, params: boundParams, operation: "all" });
+          return { results: execute(sql, boundParams) as T[] };
+        },
+        first: async <T>() => {
+          queryLog.push({ sql, params: boundParams, operation: "first" });
+          return (execute(sql, boundParams)[0] ?? null) as T | null;
+        },
+      };
+      return statement;
+    },
+  } as unknown as D1Database;
+
+  return { db, queryLog };
+}
+
+async function requestBenchmarkVersions(
+  db: D1Database,
+): Promise<{ versions: unknown[]; generated_at: string }> {
+  const app = new Hono<{ Bindings: Bindings }>();
+  registerBenchmarkVersionRoutes(app);
+
+  const response = await app.request(
+    "http://localhost/api/benchmark_versions",
+    {},
+    { prod_pinchbench: db },
+  );
+
+  expect(response.status).toBe(200);
+  return response.json();
+}
 
 describe("parseSemver", () => {
   test("parses basic version", () => {
@@ -269,5 +583,48 @@ describe("compareSemver", () => {
     test("two invalid versions are equal", () => {
       expect(compareSemver("invalid", "also-invalid")).toBe(0);
     });
+  });
+});
+
+describe("GET /api/benchmark_versions", () => {
+  test("matches the legacy N+1 count snapshot on a production-equivalent fixture", async () => {
+    const versions = createBenchmarkVersionFixtures();
+    const submissions = createSubmissionFixtures();
+    const { db } = createMockD1(versions, submissions);
+
+    const legacySnapshot = legacyBenchmarkVersionsSnapshot(versions, submissions);
+    const optimizedResponse = await requestBenchmarkVersions(db);
+
+    expect(optimizedResponse.versions).toEqual(legacySnapshot);
+    expect(optimizedResponse.generated_at).toEqual(expect.any(String));
+    expect(new Date(optimizedResponse.generated_at).toString()).not.toBe("Invalid Date");
+  });
+
+  test("uses one grouped submission count query instead of one query per visible version", async () => {
+    const versions = createBenchmarkVersionFixtures();
+    const submissions = createSubmissionFixtures();
+    const { db, queryLog } = createMockD1(versions, submissions);
+
+    await requestBenchmarkVersions(db);
+
+    const submissionQueries = queryLog.filter((entry) =>
+      entry.sql.includes("FROM submissions"),
+    );
+    const groupedCountQueries = submissionQueries.filter((entry) =>
+      entry.sql.includes("GROUP BY benchmark_version"),
+    );
+    const legacyPointCountQueries = submissionQueries.filter((entry) =>
+      entry.sql.includes("WHERE benchmark_version = ?"),
+    );
+
+    expect(submissionQueries).toHaveLength(1);
+    expect(groupedCountQueries).toHaveLength(1);
+    expect(legacyPointCountQueries).toHaveLength(0);
+
+    // The old behavior would issue one submissions count per visible version; keep the API path at two D1 reads total.
+    expect(queryLog).toHaveLength(2);
+    expect(groupedCountQueries[0].params).toHaveLength(
+      versions.filter((version) => version.hidden === 0).length,
+    );
   });
 });

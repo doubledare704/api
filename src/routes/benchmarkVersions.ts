@@ -51,6 +51,11 @@ type BenchmarkVersionRow = {
   release_url: string | null;
 };
 
+type BenchmarkVersionCountRow = {
+  benchmark_version: string;
+  count: number;
+};
+
 type BenchmarkVersionResponse = {
   id: string;
   created_at: string;
@@ -217,26 +222,38 @@ export const registerBenchmarkVersionRoutes = (
       )
       .all<BenchmarkVersionRow>();
 
-    const versionsWithCounts = await Promise.all(
-      (versions.results ?? []).map(async (version) => {
-        const countRow = await c.env.prod_pinchbench
-          .prepare(
-            "SELECT COUNT(*) as count FROM submissions WHERE benchmark_version = ?",
-          )
-          .bind(version.id)
-          .first<{ count: number }>();
-        return {
-          id: version.id,
-          created_at: version.created_at,
-          is_current: version.current === 1,
-          submission_count: countRow?.count ?? 0,
-          semver: version.semver ?? null,
-          label: getLabel(version),
-          release_notes: version.release_notes ?? null,
-          release_url: version.release_url ?? null,
-        };
-      }),
-    );
+    const visibleVersions = versions.results ?? [];
+    const versionIds = visibleVersions.map((version) => version.id);
+    const submissionCounts = new Map<string, number>();
+
+    if (versionIds.length > 0) {
+      const placeholders = versionIds.map(() => "?").join(", ");
+      const countRows = await c.env.prod_pinchbench
+        .prepare(
+          `SELECT benchmark_version, COUNT(*) as count
+           FROM submissions
+           WHERE benchmark_version IN (${placeholders})
+           GROUP BY benchmark_version`,
+        )
+        .bind(...versionIds)
+        .all<BenchmarkVersionCountRow>();
+
+      // Count all visible versions in one indexed aggregate instead of scanning submissions once per version.
+      for (const row of countRows.results ?? []) {
+        submissionCounts.set(row.benchmark_version, row.count);
+      }
+    }
+
+    const versionsWithCounts = visibleVersions.map((version) => ({
+      id: version.id,
+      created_at: version.created_at,
+      is_current: version.current === 1,
+      submission_count: submissionCounts.get(version.id) ?? 0,
+      semver: version.semver ?? null,
+      label: getLabel(version),
+      release_notes: version.release_notes ?? null,
+      release_url: version.release_url ?? null,
+    }));
 
     const sortedVersions = sortVersions(versionsWithCounts);
 
