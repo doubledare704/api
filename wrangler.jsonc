@@ -1,14 +1,21 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "pinchbench-api",
+	"account_id": "e115e769bcdd4c3d66af59d3332cb394",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-02-12",
 	"d1_databases": [
 		{
 			"binding": "prod_pinchbench",
 			"database_name": "prod-pinchbench",
-			"database_id": "85219a08-0016-4255-bd3f-c347705f97a0",
+			"database_id": "e6c249ec-b2ae-4230-a1d7-17016431cabd",
 			"remote": true
+		}
+	],
+	"routes": [
+		{
+			"pattern": "api.pinchbench.com",
+			"custom_domain": true
 		}
 	],
 	"triggers": {
@@ -26,7 +33,10 @@
 	// Set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD in Cloudflare Dashboard (Settings → Variables)
 	// For local development only: set CF_ACCESS_BYPASS=true via `wrangler dev --var CF_ACCESS_BYPASS:true`
 	"vars": {
-		"CF_ACCESS_BYPASS": "false"
+		"CF_ACCESS_BYPASS": "false",
+		"CF_ACCESS_TEAM_DOMAIN": "engineering-e11.cloudflareaccess.com",
+		"CF_ACCESS_AUD": "b71bf455da18651ded735997d7fc391bd234a7eb7a637c884aecc1ac535baa0e",
+		"GITHUB_CLIENT_ID": "Ov23litsCSqJuxLAb956"
 	}
 	// "compatibility_flags": [
 	//   "nodejs_compat"
